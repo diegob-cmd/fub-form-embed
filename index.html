@@ -1,39 +1,153 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
   <head>
-    <meta charset="utf-8">
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>VTK Appointment</title>
+    <!-- Follow Up Boss Embedded App SDK -->
+    <script type="text/javascript" src="https://eia.followupboss.com/embeddedApps-v1.0.1.js"></script>
     <style>
-      body, html { 
-        margin: 0; 
-        padding: 0; 
-        height: 100%; 
-        overflow: hidden; 
-        background-color: #f9f9f9;
+      html, body {
+        margin: 0;
+        padding: 0;
+        min-height: 220px; /* Prevents iframe from collapsing to 0px */
+        background-color: #ffffff;
       }
-      iframe { 
-        width: 100%; 
-        height: 100vh; 
-        border: none; 
+      body { 
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
+        padding: 12px; 
+        font-size: 13px; 
+        color: #2b3b4c;
+        box-sizing: border-box;
+      }
+      .data-row { 
+        margin-bottom: 8px; 
+        padding-bottom: 6px; 
+        border-bottom: 1px solid #edf2f7; 
+      }
+      .label { 
+        font-weight: 600; 
+        color: #718096; 
+        display: block; 
+        font-size: 11px; 
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+      .value { 
+        font-size: 13px; 
+        color: #1a202c; 
+        font-weight: 500;
+        word-break: break-word;
+      }
+      .status-box {
+        padding: 10px;
+        border-radius: 4px;
+        background: #f7fafc;
+        border: 1px solid #e2e8f0;
+        font-size: 12px;
+        color: #4a5568;
       }
     </style>
   </head>
   <body>
-    <!-- The Google Form will load instantly -->
-    <iframe id="gform" src="https://docs.google.com/forms/d/e/1FAIpQLSezQOU-A8zMwSCDudjomGj2VsDsCNmbFH9fs_H6XPGkLsfihg/viewform?usp=sharing&ouid=106637086441749552268?embedded=true"></iframe>
+    <div id="idx-content">
+      <div class="status-box" id="status-msg">Initializing app...</div>
+    </div>
 
-    <!-- Optional FUB Script if you want to dynamically pass the Lead ID later -->
-    <script type="text/javascript" src="https://eia.followupboss.com/embeddedApps-v1.0.1.js"></script>
     <script>
-      // Initialize Follow Up Boss in the background (does not block the UI)
-      FUB.init().then(function(context) {
-        const leadId = context.person.id;
-        console.log("Viewing FUB Lead ID:", leadId);
+      // 1. Paste your deployed Google Apps Script Web App URL here
+      const GOOGLE_SCRIPT_API_URL = "https://script.google.com/macros/s/AKfycbxs5LBZwpZif03A8CcFhm411I7UfKbsRR39eXpIQ5vh_gJmHrvF596NiOm_v4aGZesuPg/exec";
+
+      function updateStatus(message) {
+        const el = document.getElementById('idx-content');
+        if (el) el.innerHTML = `<div class="status-box">${message}</div>`;
+      }
+
+      function renderLeadData(data) {
+        document.getElementById('idx-content').innerHTML = `
+          <div class="data-row">
+            <span class="label">Property Address</span>
+            <span class="value">${data.address || "—"}</span>
+          </div>
+          <div class="data-row">
+            <span class="label">Assigned Zone</span>
+            <span class="value">${data.area || "—"}</span>
+          </div>
+          <div class="data-row">
+            <span class="label">Lead Type</span>
+            <span class="value">${data.tipoLead || "—"}</span>
+          </div>
+          <div class="data-row">
+            <span class="label">ISA</span>
+            <span class="value">${data.isa || "—"}</span>
+          </div>
+        `;
+      }
+
+      function fetchSheetData(leadId) {
+        updateStatus(`Searching Google Sheet for Lead ID: <b>${leadId}</b>...`);
+
+        if (GOOGLE_SCRIPT_API_URL.includes("YOUR_SCRIPT_ID")) {
+          updateStatus("Ready. Replace <code>YOUR_SCRIPT_ID</code> in <code>index.html</code> with your Google Apps Script URL.");
+          return;
+        }
+
+        fetch(`${GOOGLE_SCRIPT_API_URL}?leadId=${encodeURIComponent(leadId)}`)
+          .then(res => res.json())
+          .then(res => {
+            if (res.success && res.found && res.data) {
+              renderLeadData(res.data);
+            } else {
+              updateStatus(`No records found for Lead ID <b>${leadId}</b>.`);
+            }
+          })
+          .catch(err => {
+            console.error("API error:", err);
+            updateStatus("Failed to communicate with Google Sheets backend.");
+          });
+      }
+
+      // Helper to read context from URL parameters in FUB preview mode
+      function getContextFromURL() {
+        try {
+          const params = new URLSearchParams(window.location.search);
+          const raw = params.get('context');
+          if (raw) return JSON.parse(atob(raw));
+        } catch (e) {
+          console.warn("Could not decode URL context", e);
+        }
+        return null;
+      }
+
+      // Initialization routine
+      (function start() {
+        const urlContext = getContextFromURL();
         
-        // In the future, you can append this Lead ID to your Google Form URL here
-        // so agents don't have to manually type the FUB Link!
-      }).catch(function(e) {
-        console.log("Not loaded inside FUB, but the form will still display.");
-      });
+        // If loaded inside Follow Up Boss with SDK
+        if (window.FUB && typeof FUB.init === 'function') {
+          FUB.init().then(function(context) {
+            const ctx = context || urlContext;
+            const leadId = ctx && ctx.person ? ctx.person.id : null;
+            if (leadId) {
+              fetchSheetData(leadId);
+            } else {
+              updateStatus("FUB connected. (No lead selected or preview state)");
+            }
+          }).catch(function(err) {
+            console.warn("FUB.init rejected, checking fallback:", err);
+            if (urlContext && urlContext.person && urlContext.person.id) {
+              fetchSheetData(urlContext.person.id);
+            } else {
+              updateStatus("Ready. Waiting for lead context...");
+            }
+          });
+        } else if (urlContext && urlContext.person && urlContext.person.id) {
+          // Direct fallback from URL query string
+          fetchSheetData(urlContext.person.id);
+        } else {
+          updateStatus("App loaded outside Follow Up Boss. No lead context provided.");
+        }
+      })();
     </script>
   </body>
 </html>
