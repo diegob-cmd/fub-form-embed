@@ -8,30 +8,19 @@
     <style>
       body { 
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
-        padding: 10px; 
-        font-size: 13px; 
-        color: #2b3b4c;
         margin: 0;
+        padding: 6px;
         box-sizing: border-box;
       }
-      .data-row { 
-        margin-bottom: 8px; 
-        padding-bottom: 6px; 
-        border-bottom: 1px solid #edf2f7; 
+      .form-container {
+        width: 100%;
+        height: 100vh;
       }
-      .label { 
-        font-weight: 600; 
-        color: #718096; 
-        display: block; 
-        font-size: 11px; 
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-      }
-      .value { 
-        font-size: 13px; 
-        color: #1a202c; 
-        font-weight: 500;
-        word-break: break-word;
+      iframe {
+        width: 100%;
+        height: 800px;
+        border: none;
+        border-radius: 6px;
       }
       .status-box {
         padding: 10px;
@@ -40,81 +29,46 @@
         border: 1px solid #e2e8f0;
         font-size: 12px;
         color: #4a5568;
-        line-height: 1.4;
       }
-      .status-box b { color: #2d3748; }
-      .err { color: #e53e3e; }
     </style>
   </head>
   <body>
-    <div id="idx-content">
-      <div class="status-box">Detecting Follow Up Boss lead...</div>
+    <div id="form-wrapper">
+      <div class="status-box">Loading Google Form...</div>
     </div>
 
     <script>
-      // ---> PASTE YOUR GOOGLE APPS SCRIPT WEB APP URL HERE <---
-      const GOOGLE_SCRIPT_API_URL = "https://script.google.com/macros/s/AKfycbxs5LBZwpZif03A8CcFhm411I7UfKbsRR39eXpIQ5vh_gJmHrvF596NiOm_v4aGZesuPg/exec";
+      // 1. Base URL of your Google Form
+      const GOOGLE_FORM_BASE_URL = "https://docs.google.com/forms/d/e/1FAIpQLSezQOU-A8zMwSCDudjomGj2VsDsCNmbFH9fs_H6XPGkLsfihg/viewform";
 
-      function setStatus(html) {
-        document.getElementById('idx-content').innerHTML = `<div class="status-box">${html}</div>`;
-      }
+      // 2. Pre-fill entry IDs (Leave empty string "" if not prefilling that field)
+      const ENTRY_FUB_ID = "entry.111111111"; // Lead ID field
+      const ENTRY_NAME   = "entry.222222222"; // Name field
+      const ENTRY_EMAIL  = "entry.333333333"; // Email field
+      const ENTRY_PHONE  = "entry.444444444"; // Phone field
 
-      function renderLeadData(data) {
-        document.getElementById('idx-content').innerHTML = `
-          <div class="data-row">
-            <span class="label">Property Address</span>
-            <span class="value">${data.address || "—"}</span>
-          </div>
-          <div class="data-row">
-            <span class="label">Assigned Zone</span>
-            <span class="value">${data.area || "—"}</span>
-          </div>
-          <div class="data-row">
-            <span class="label">Lead Type</span>
-            <span class="value">${data.tipoLead || "—"}</span>
-          </div>
-          <div class="data-row">
-            <span class="label">ISA</span>
-            <span class="value">${data.isa || "—"}</span>
+      function loadForm(person) {
+        let url = GOOGLE_FORM_BASE_URL;
+
+        if (person) {
+          const leadId = String(person.id || "").trim();
+          const email = (person.emails && person.emails[0]) ? person.emails[0].value.trim() : "";
+          const phone = (person.phones && person.phones[0]) ? person.phones[0].value.trim() : "";
+          const displayName = ((person.firstName || "") + " " + (person.lastName || "")).trim();
+
+          if (ENTRY_FUB_ID && leadId) url += `&${ENTRY_FUB_ID}=${encodeURIComponent(leadId)}`;
+          if (ENTRY_NAME && displayName) url += `&${ENTRY_NAME}=${encodeURIComponent(displayName)}`;
+          if (ENTRY_EMAIL && email) url += `&${ENTRY_EMAIL}=${encodeURIComponent(email)}`;
+          if (ENTRY_PHONE && phone) url += `&${ENTRY_PHONE}=${encodeURIComponent(phone)}`;
+        }
+
+        document.getElementById('form-wrapper').innerHTML = `
+          <div class="form-container">
+            <iframe src="${url}" frameborder="0" marginheight="0" marginwidth="0">Loading form...</iframe>
           </div>
         `;
       }
 
-      function queryGoogleSheet(person) {
-        const leadId = String(person.id || "").trim();
-        const email = (person.emails && person.emails[0]) ? person.emails[0].value.trim() : "";
-        const phone = (person.phones && person.phones[0]) ? person.phones[0].value.trim() : "";
-        const displayName = (person.firstName || "") + " " + (person.lastName || "");
-
-        if (!leadId && !email && !phone) {
-          setStatus("No ID, email, or phone found for this contact.");
-          return;
-        }
-
-        setStatus(`Searching records for <b>${displayName.trim() || leadId}</b>...`);
-
-        if (GOOGLE_SCRIPT_API_URL.includes("YOUR_SCRIPT_ID")) {
-          setStatus("<span class='err'>Error:</span> Replace <code>YOUR_SCRIPT_ID</code> in <code>index.html</code> with your Google Apps Script URL.");
-          return;
-        }
-
-        const endpoint = `${GOOGLE_SCRIPT_API_URL}?leadId=${encodeURIComponent(leadId)}&email=${encodeURIComponent(email)}&phone=${encodeURIComponent(phone)}`;
-
-        fetch(endpoint)
-          .then(res => res.json())
-          .then(res => {
-            if (res.success && res.found && res.data) {
-              renderLeadData(res.data);
-            } else {
-              setStatus(`No Google Form records found matching ID <b>${leadId}</b>, email <b>${email}</b>, or phone <b>${phone}</b>.`);
-            }
-          })
-          .catch(err => {
-            setStatus(`<span class='err'>Backend Error:</span> Could not fetch from Google Apps Script.<br><small>${err.message}</small>`);
-          });
-      }
-
-      // 1. Direct extraction from URL context
       function parseUrlContext() {
         try {
           const params = new URLSearchParams(window.location.search);
@@ -131,27 +85,25 @@
 
       let initialized = false;
 
-      // Try reading directly from URL query string
+      // Check context in URL
       const urlPerson = parseUrlContext();
       if (urlPerson) {
         initialized = true;
-        queryGoogleSheet(urlPerson);
+        loadForm(urlPerson);
       }
 
-      // Initialize FUB SDK for dynamic resizing and iframe messaging
+      // Initialize via Follow Up Boss Embedded App SDK
       if (window.FUB && typeof FUB.init === 'function') {
         FUB.init().then(function(context) {
           if (!initialized && context && context.person) {
             initialized = true;
-            queryGoogleSheet(context.person);
+            loadForm(context.person);
           }
-        }).catch(function(err) {
-          if (!initialized) {
-            setStatus("Ready. Waiting for Follow Up Boss context...");
-          }
+        }).catch(function() {
+          if (!initialized) loadForm(null);
         });
       } else if (!urlPerson) {
-        setStatus("Ready. App loaded outside Follow Up Boss.");
+        loadForm(null);
       }
     </script>
   </body>
