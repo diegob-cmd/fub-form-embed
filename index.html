@@ -56,7 +56,7 @@
 
     <script>
       // 1. Paste your deployed Google Apps Script Web App URL here
-      const GOOGLE_SCRIPT_API_URL = "https://script.google.com/macros/s/AKfycbxs5LBZwpZif03A8CcFhm411I7UfKbsRR39eXpIQ5vh_gJmHrvF596NiOm_v4aGZesuPg/exec";
+      const GOOGLE_SCRIPT_API_URL = "https://script.google.com/macros/s/AKfycbyo5Wg82YxPsfjBIdYH2cR-_MS_vUj-Au21tPAf4T2yeWoOhruYLxv_M8EJb21vpwu4pg/exec";
 
       function updateStatus(message) {
         const el = document.getElementById('idx-content');
@@ -126,28 +126,35 @@
         // If loaded inside Follow Up Boss with SDK
         if (window.FUB && typeof FUB.init === 'function') {
           FUB.init().then(function(context) {
-            const ctx = context || urlContext;
-            const leadId = ctx && ctx.person ? ctx.person.id : null;
-            if (leadId) {
-              fetchSheetData(leadId);
-            } else {
-              updateStatus("FUB connected. (No lead selected or preview state)");
+            const person = context ? context.person : null;
+            if (!person || !person.id) {
+              updateStatus("Ready. No lead selected.");
+              return;
             }
-          }).catch(function(err) {
-            console.warn("FUB.init rejected, checking fallback:", err);
-            if (urlContext && urlContext.person && urlContext.person.id) {
-              fetchSheetData(urlContext.person.id);
-            } else {
-              updateStatus("Ready. Waiting for lead context...");
-            }
-          });
-        } else if (urlContext && urlContext.person && urlContext.person.id) {
-          // Direct fallback from URL query string
-          fetchSheetData(urlContext.person.id);
-        } else {
-          updateStatus("App loaded outside Follow Up Boss. No lead context provided.");
-        }
-      })();
+            
+            const leadId = person.id || "";
+            const email = (person.emails && person.emails[0]) ? person.emails[0].value : "";
+            const phone = (person.phones && person.phones[0]) ? person.phones[0].value : "";
+            
+            updateStatus(`Searching Google Sheet for Lead ID: <b>${leadId}</b>...`);
+            
+            const queryUrl = `${GOOGLE_SCRIPT_API_URL}?leadId=${encodeURIComponent(leadId)}&email=${encodeURIComponent(email)}&phone=${encodeURIComponent(phone)}`;
+            
+            fetch(queryUrl)
+              .then(res => res.json())
+              .then(res => {
+                if (res.success && res.found && res.data) {
+                  renderLeadData(res.data);
+                } else {
+                  updateStatus(`No records found for Lead ID <b>${leadId}</b>.`);
+                }
+              })
+              .catch(err => {
+                console.error(err);
+                updateStatus("Failed to communicate with Google Sheets backend.");
+              });
+            });
+          })();
     </script>
   </body>
 </html>
