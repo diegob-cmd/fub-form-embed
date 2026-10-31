@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <style>
+      body, html { 
+        margin: 0; 
+        padding: 0; 
+        height: 100%; 
+        overflow: hidden; 
+        background-color: #f9f9f9;
+      }
+      iframe { 
+        width: 100%; 
+        height: 100vh; 
+        border: none; 
+      }
+    </style>
+  </head>
+  <body>
+    <!-- The Google Form will load instantly -->
+    <iframe id="gform" src="https://docs.google.com/forms/d/e/1FAIpQLSezQOU-A8zMwSCDudjomGj2VsDsCNmbFH9fs_H6XPGkLsfihg/viewform?usp=sharing&ouid=106637086441749552268?embedded=true"></iframe>
+
+    <!-- Optional FUB Script if you want to dynamically pass the Lead ID later -->
+    <script type="text/javascript" src="https://eia.followupboss.com/embeddedApps-v1.0.1.js"></script>
+    <script>
+      // Initialize Follow Up Boss in the background (does not block the UI)
+      FUB.init().then(function(context) {
+        const leadId = context.person.id;
+        console.log("Viewing FUB Lead ID:", leadId);
+        
+        // In the future, you can append this Lead ID to your Google Form URL here
+        // so agents don't have to manually type the FUB Link!
+      }).catch(function(e) {
+        console.log("Not loaded inside FUB, but the form will still display.");
+      });
+    </script>
+  </body>
+</html>
