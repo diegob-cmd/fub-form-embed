@@ -10,7 +10,7 @@
       html, body {
         margin: 0;
         padding: 0;
-        min-height: 220px; /* Prevents iframe from collapsing to 0px */
+        min-height: 220px; 
         background-color: #ffffff;
       }
       body { 
@@ -51,12 +51,12 @@
   </head>
   <body>
     <div id="idx-content">
-      <div class="status-box" id="status-msg">Initializing app...</div>
+      <div class="status-box" id="status-msg">Loading connection to FUB...</div>
     </div>
 
     <script>
       // 1. Paste your deployed Google Apps Script Web App URL here
-      const GOOGLE_SCRIPT_API_URL = "https://script.google.com/macros/s/AKfycbyo5Wg82YxPsfjBIdYH2cR-_MS_vUj-Au21tPAf4T2yeWoOhruYLxv_M8EJb21vpwu4pg/exec";
+      const GOOGLE_SCRIPT_API_URL = "https://script.google.com/macros/s/YOUR_SCRIPT_ID/exec";
 
       function updateStatus(message) {
         const el = document.getElementById('idx-content');
@@ -84,7 +84,12 @@
         `;
       }
 
-      function fetchSheetData(leadId) {
+      function fetchSheetData(leadId, email, phone) {
+        if (!leadId) {
+            updateStatus("Error: No Lead ID provided to fetch.");
+            return;
+        }
+
         updateStatus(`Searching Google Sheet for Lead ID: <b>${leadId}</b>...`);
 
         if (GOOGLE_SCRIPT_API_URL.includes("YOUR_SCRIPT_ID")) {
@@ -92,7 +97,12 @@
           return;
         }
 
-        fetch(`${GOOGLE_SCRIPT_API_URL}?leadId=${encodeURIComponent(leadId)}`)
+        // Construct URL safely handling undefined email/phone
+        const safeEmail = email || "";
+        const safePhone = phone || "";
+        const queryUrl = `${GOOGLE_SCRIPT_API_URL}?leadId=${encodeURIComponent(leadId)}&email=${encodeURIComponent(safeEmail)}&phone=${encodeURIComponent(safePhone)}`;
+
+        fetch(queryUrl)
           .then(res => res.json())
           .then(res => {
             if (res.success && res.found && res.data) {
@@ -107,54 +117,43 @@
           });
       }
 
-      // Helper to read context from URL parameters in FUB preview mode
-      function getContextFromURL() {
-        try {
-          const params = new URLSearchParams(window.location.search);
-          const raw = params.get('context');
-          if (raw) return JSON.parse(atob(raw));
-        } catch (e) {
-          console.warn("Could not decode URL context", e);
-        }
-        return null;
+      // Safe extraction helper
+      function extractPersonData(person) {
+          if (!person) return null;
+          return {
+              id: person.id || "",
+              email: (person.emails && person.emails.length > 0) ? person.emails[0].value : "",
+              phone: (person.phones && person.phones.length > 0) ? person.phones[0].value : ""
+          };
       }
 
-      // Initialization routine
-      (function start() {
-        const urlContext = getContextFromURL();
-        
-        // If loaded inside Follow Up Boss with SDK
-        if (window.FUB && typeof FUB.init === 'function') {
-          FUB.init().then(function(context) {
-            const person = context ? context.person : null;
-            if (!person || !person.id) {
-              updateStatus("Ready. No lead selected.");
-              return;
+      // Safe initialization
+      window.onload = function() {
+        try {
+            if (typeof FUB !== 'undefined' && typeof FUB.init === 'function') {
+                FUB.init().then(function(context) {
+                    if (context && context.person) {
+                        const pd = extractPersonData(context.person);
+                        if (pd.id) {
+                            fetchSheetData(pd.id, pd.email, pd.phone);
+                        } else {
+                            updateStatus("No Lead ID found in the FUB context.");
+                        }
+                    } else {
+                        updateStatus("FUB Connected, but no person context available (Preview mode?).");
+                    }
+                }).catch(function(err) {
+                    console.error("FUB Init rejected:", err);
+                    updateStatus("Follow Up Boss connection rejected.");
+                });
+            } else {
+                 updateStatus("Follow Up Boss SDK not detected.");
             }
-            
-            const leadId = person.id || "";
-            const email = (person.emails && person.emails[0]) ? person.emails[0].value : "";
-            const phone = (person.phones && person.phones[0]) ? person.phones[0].value : "";
-            
-            updateStatus(`Searching Google Sheet for Lead ID: <b>${leadId}</b>...`);
-            
-            const queryUrl = `${GOOGLE_SCRIPT_API_URL}?leadId=${encodeURIComponent(leadId)}&email=${encodeURIComponent(email)}&phone=${encodeURIComponent(phone)}`;
-            
-            fetch(queryUrl)
-              .then(res => res.json())
-              .then(res => {
-                if (res.success && res.found && res.data) {
-                  renderLeadData(res.data);
-                } else {
-                  updateStatus(`No records found for Lead ID <b>${leadId}</b>.`);
-                }
-              })
-              .catch(err => {
-                console.error(err);
-                updateStatus("Failed to communicate with Google Sheets backend.");
-              });
-            });
-          })();
+        } catch (e) {
+            console.error("Fatal error during init:", e);
+            updateStatus("Fatal script error: " + e.message);
+        }
+      };
     </script>
   </body>
 </html>
